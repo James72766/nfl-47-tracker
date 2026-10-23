@@ -1,10 +1,10 @@
 """BetMGM snapshot robot for the 47 Rule Tracker.
 
 Runs on GitHub's schedule (see .github/workflows/collect.yml). Each run asks
-The Odds API for BetMGM's NFL totals (1 credit) and saves a new row in
-data/betmgm-lines.csv only when a game's total or prices changed. So the first
-row for a game is the first number we saw (the opener), and the line at any
-moment is the last row before that moment.
+The Odds API for BetMGM's NFL totals (1 credit) and saves a row in
+data/betmgm-lines.csv for every game that hasn't kicked off yet, changed or not.
+So the first row for a game is the first number we saw (the opener), and a game
+missing from the latest check means BetMGM has taken it off the board.
 
 Every run, changed or not, is logged in data/robot-runs.csv so gaps show up.
 
@@ -91,9 +91,10 @@ def alerts_for(last, added):
         prev = last.get(r["event_id"])
         if prev and (float(prev["total"]) >= THRESHOLD) != (float(r["total"]) >= THRESHOLD):
             alerts.append((
-                f"Flipped: {r['away']} @ {r['home']} is now {bet(r['total']).split()[0]}",
+                f"Rule flipped: {r['away']} @ {r['home']} now says {bet(r['total']).split()[0]}",
                 f"BetMGM moved {float(prev['total']):g} → {float(r['total']):g}. "
-                f"New play: {bet(r['total'])}  ({kickoff(r)})",
+                f"Rule now says {bet(r['total'])}  ({kickoff(r)}). "
+                f"This doesn't change a bet you already placed.",
             ))
     return alerts
 
@@ -119,13 +120,43 @@ def main():
         games = json.load(resp)
         credits_left = resp.headers.get("x-requests-remaining", "")
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(timezone.utc)
     last = {}
     for r in read_rows(LINES):
         last[r["event_id"]] = r
 
-    added, with_lines = [], 0
+    rows = pregame_rows(games, now)
+    # Lines that moved (or are new) since the last check drive the alerts.
+    moved = [r for r in rows if not same_line(last.get(r["event_id"]), r)]
+
+    os.makedirs(os.path.dirname(LINES), exist_ok=True)
+    if rows:
+        append_rows(LINES, LINE_COLS, rows)
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    append_rows(RUNS, RUN_COLS, [{"run_at_utc": stamp, "games_with_lines": len(rows),
+                                  "rows_added": len(rows), "credits_left": credits_left}])
+    print(f"{stamp}: {len(rows)} pregame games with BetMGM totals, {len(moved)} moved or new, "
+          f"{credits_left} credits left")
+    for title, message in alerts_for(last, moved):
+        send(title, message)
+
+
+def same_line(prev, row):
+    return bool(prev) and all(str(prev[k]) == str(row[k])
+                              for k in ("total", "over_price", "under_price", "kickoff_utc"))
+
+
+def pregame_rows(games, now):
+    """One row per game BetMGM has a clean pregame total for, saved every check.
+
+    Games already kicked off are skipped (their live totals would look like
+    line moves), and so is any market whose over and under totals disagree."""
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = []
     for g in games:
+        kick = datetime.fromisoformat(g["commence_time"].replace("Z", "+00:00"))
+        if kick <= now:
+            continue
         book = next((b for b in g.get("bookmakers", []) if b["key"] == "betmgm"), None)
         market = book and next((m for m in book["markets"] if m["key"] == "totals"), None)
         if not market:
@@ -133,9 +164,10 @@ def main():
         sides = {o["name"]: o for o in market["outcomes"]}
         if "Over" not in sides or "Under" not in sides:
             continue
-        with_lines += 1
-        row = {
-            "seen_at_utc": now,
+        if sides["Over"].get("point") is None or sides["Over"]["point"] != sides["Under"].get("point"):
+            continue
+        rows.append({
+            "seen_at_utc": stamp,
             "event_id": g["id"],
             "kickoff_utc": g["commence_time"],
             "away": TEAM.get(g["away_team"], g["away_team"]),
@@ -144,22 +176,8 @@ def main():
             "over_price": sides["Over"]["price"],
             "under_price": sides["Under"]["price"],
             "book_updated_utc": book.get("last_update", ""),
-        }
-        prev = last.get(g["id"])
-        same = prev and all(str(prev[k]) == str(row[k])
-                            for k in ("total", "over_price", "under_price", "kickoff_utc"))
-        if not same:
-            added.append(row)
-
-    os.makedirs(os.path.dirname(LINES), exist_ok=True)
-    if added:
-        append_rows(LINES, LINE_COLS, added)
-    append_rows(RUNS, RUN_COLS, [{"run_at_utc": now, "games_with_lines": with_lines,
-                                  "rows_added": len(added), "credits_left": credits_left}])
-    print(f"{now}: {with_lines} games with BetMGM totals, {len(added)} new rows, "
-          f"{credits_left} credits left")
-    for title, message in alerts_for(last, added):
-        send(title, message)
+        })
+    return rows
 
 
 if __name__ == "__main__":
