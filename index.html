@@ -127,6 +127,13 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     <div id="plays" class="plays"></div>
   </section>
 
+  <section class="panel" aria-labelledby="rf-h" style="display:grid;gap:10px">
+    <h2 id="rf-h">Research flags</h2>
+    <p class="note" style="margin:0"><b>Forward tracking begins Week 8.</b> Each rule is graded on its own side, at BetMGM's last number before kickoff.</p>
+    <div class="tablewrap"><table id="flags"></table></div>
+    <p class="note" id="flags-note" style="margin:0"></p>
+  </section>
+
   <section class="panel" aria-labelledby="ht-h" style="display:grid;gap:10px">
     <h2 id="ht-h">By how high the line is</h2>
     <div class="tablewrap"><table id="heights"></table></div>
@@ -283,6 +290,79 @@ function sky(g) {
   return +g.wind <= 15 ? "Outside, wind 10–15" : "Outside, wind 16+";
 }
 
+// ---- Research flags (saved by the robot every check; picks never change) ----
+// Rule 2: BetMGM total ≤ 45 and both teams allowing ≥ 26 a game → UNDER.
+// Rule 3: a team scoring < 14 a game, not an underdog of more than 8 → OVER.
+let flagRows = [];
+const FORWARD_WEEK = 8;
+
+// The robot's latest rule check for an nflverse game, at or before a moment.
+function flagsFor(g, beforeMs) {
+  const near = Date.parse(g.gameday + "T12:00:00Z");
+  let hit = null;
+  flagRows.forEach(f => {
+    const same = (f.away === g.away_team && f.home === g.home_team) || (f.away === g.home_team && f.home === g.away_team);
+    if (same && Math.abs(Date.parse(f.kickoff_utc) - near) < 2 * 864e5 &&
+        Date.parse(f.seen_at_utc) <= beforeMs && (!hit || f.seen_at_utc > hit.seen_at_utc)) hit = f;
+  });
+  return hit;
+}
+
+// Flag lines for a play card: green when the rule agrees with the pick, red when it doesn't.
+function flagLines(f, side) {
+  if (!f) return "";
+  const one = n => (+n).toFixed(1);
+  const lines = [];
+  if (f.r2_bad_def_under === "1") lines.push([side === "under",
+    `Bad-defense flag: UNDER · ${f.home} allows ${one(f.home_pa)} (${f.home_prior_games} games), ${f.away} allows ${one(f.away_pa)} (${f.away_prior_games} games)`]);
+  if (f.r3_low_scoring_over === "1") f.r3_teams.split("+").forEach(t => {
+    const home = t === f.home;
+    lines.push([side === "over", `Low-scoring-team flag: OVER · ${t} scoring ${one(home ? f.home_pf : f.away_pf)} (${home ? f.home_prior_games : f.away_prior_games} games)`]);
+  });
+  return lines.map(([agree, text]) => `<div class="wx ${agree ? "good" : "bad"}">${agree ? "✓" : "⚠"} ${text}</div>`).join("");
+}
+
+// Forward record for each rule from Week 8, graded on the rule's own side.
+function renderFlagTable(rows) {
+  const games = rows.filter(r => +r.season === SEASON && r.game_type === "REG" && +r.week >= FORWARD_WEEK && r.home_score !== "");
+  const RULES = [
+    ["Bad-defense UNDER (1+ prior games)", "r2_bad_def_under", "under"],
+    ["Bad-defense UNDER (4+ prior games)", "r2_4plus", "under"],
+    ["Low-scoring-team OVER (1+ prior games)", "r3_low_scoring_over", "over"],
+    ["Low-scoring-team OVER (4+ prior games)", "r3_4plus", "over"],
+  ];
+  let unchecked = 0;
+  const frozen = games.map(g => {
+    const f = flagsFor(g, kickoffUTC(g.gameday, g.gametime) - 1);
+    if (!f) unchecked++;
+    return [g, f];
+  });
+  const ungraded = new Set();
+  const body = RULES.map(([label, key, side]) => {
+    const t = { W: 0, L: 0, P: 0, units: 0 };
+    frozen.forEach(([g, f]) => {
+      if (!f || f[key] !== "1") return;
+      const priceRaw = side === "under" ? f.under_price : f.over_price;
+      if (f.total === "" || priceRaw === "") { ungraded.add(`${g.away_team} @ ${g.home_team}: missing BetMGM ${f.total === "" ? "total" : "price"}`); return; }
+      const pts = +g.home_score + +g.away_score, line = +f.total;
+      if (pts === line) t.P++;
+      else if ((pts < line) === (side === "under")) { t.W++; t.units += winUnits(priceRaw); }
+      else { t.L++; t.units -= 1; }
+    });
+    const n = t.W + t.L + t.P;
+    return `<tr><td>${label}</td><td class="r num">${n}</td><td class="r num">${n ? `${t.W}–${t.L}–${t.P}` : "—"}</td>` +
+      `<td class="r num ${n ? cls(t.units) : ""}">${n ? u(t.units) : "—"}</td><td class="r num">${n ? (100 * t.units / n).toFixed(1) + "%" : "—"}</td></tr>`;
+  }).join("");
+  document.getElementById("flags").innerHTML =
+    `<thead><tr><th>Rule</th><th class="r">Bets</th><th class="r">W–L–P</th><th class="r">Units</th><th class="r">ROI</th></tr></thead><tbody>${body}</tbody>`;
+  const notes = [];
+  if (!games.length) notes.push("No Week 8 games have finished yet.");
+  if (ungraded.size) notes.push(`Ungraded: ${[...ungraded].join("; ")}.`);
+  if (unchecked) notes.push(`${unchecked} finished game${unchecked > 1 ? "s" : ""} had no robot check before kickoff, so ${unchecked > 1 ? "they" : "it"} can't be graded.`);
+  notes.push("The rows are separate experiments; don't add them together.");
+  document.getElementById("flags-note").textContent = notes.join(" ");
+}
+
 // Short form for the play cards: "Sun 10/25 6:30am" (Vegas time).
 function shortTime(day, time) {
   const [, mo, dd] = day.split("-").map(Number);
@@ -411,6 +491,7 @@ function render(rows) {
       <div class="pick ${side}">${side === "over" ? "OVER" : "UNDER"} ${fmtLine(line)}<small class="num">${price(odds)}${live ? "" : " avg"}</small></div>
       ${m && m.offBoard ? `<div class="wx bad">⚠ BetMGM line not showing in latest check · last seen ${fmtLine(m.current.total)} at ${vegasStamp(m.lastSeen)}</div>` : ""}
       <div class="wx wait" id="wx-${x.g.game_id}">Checking weather…</div>
+      ${flagLines(flagsFor(x.g, Date.now()), side)}
       ${m ? `<div class="lines">
         ${lineCell("Open", m.open, "—")}
         ${lineCell("Morning", m.morning, m.morningNA ? "early kick" : "8am")}
@@ -418,7 +499,8 @@ function render(rows) {
       </div>
       <div class="move">${moveText(m)}</div>` : ""}
     </div>`;
-  }).join("") + `<p class="note" style="margin:0">BetMGM lines move during the week. A game that crosses 47 flips sides.</p>`
+  }).join("") + `<p class="note" style="margin:0">BetMGM lines move during the week. A game that crosses 47 flips sides. ` +
+    `Flag lines: green agrees with the pick, red disagrees. They're research flags, not stronger picks or reasons to bet more.</p>`
     : `<p class="note">No upcoming games with a line yet.</p>`;
   plays.forEach(async x => {
     const el = document.getElementById("wx-" + x.g.game_id);
@@ -501,11 +583,20 @@ async function loadMgm() {
   } catch (e) { /* page still works on the season file alone */ }
 }
 
+async function loadFlags() {
+  try {
+    const res = await fetch(ROBOT + "research-flags.csv?t=" + Date.now(), { cache: "no-store" });
+    if (res.ok) flagRows = parseCSV(await res.text());
+  } catch (e) { /* no flags yet; the table shows empty */ }
+}
+
 async function load() {
   try {
-    const [res] = await Promise.all([fetch(SRC + "?t=" + Date.now(), { cache: "no-store" }), loadMgm()]);
+    const [res] = await Promise.all([fetch(SRC + "?t=" + Date.now(), { cache: "no-store" }), loadMgm(), loadFlags()]);
     if (!res.ok) throw new Error("status " + res.status);
-    render(parseCSV(await res.text()));
+    const rows = parseCSV(await res.text());
+    render(rows);
+    renderFlagTable(rows);
   } catch (e) {
     document.getElementById("record").innerHTML =
       `<p class="err">Couldn't load the game data (${e.message}). Check your connection, then tap Refresh now.</p>`;
