@@ -91,7 +91,8 @@ table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 td { padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 td.r, th.r { text-align: right; }
-#weather td:first-child { white-space: normal; }
+#weather td:first-child, #heights td:first-child { white-space: normal; }
+#heights tr.split-start td { border-top: 2px solid var(--line); padding-top: 12px; }
 #log { font-size: .85rem; }
 #log td, #log th { padding-inline: 4px; }
 #log th { white-space: nowrap; vertical-align: bottom; }
@@ -435,13 +436,17 @@ function render(rows) {
     { side: "under", label: "Under 44–46.5", lo: 44, hi: 47 },
     { side: "under", label: "Under 41–43.5", lo: 41, hi: 44 },
     { side: "under", label: "Under 40.5 or less", lo: 0, hi: 41 },
+    // Tracking only (Oct 23): do close-game unders keep beating the rest? Picks don't change.
+    { side: "under", label: "Unders, spread 2.5 or less", lo: 0, hi: 47, close: true },
+    { side: "under", label: "Unders, spread 3 or more", lo: 0, hi: 47, close: false },
   ];
-  const inB = (x, b) => x.side === b.side && x.line >= b.lo && x.line < b.hi;
+  const inB = (x, b) => x.side === b.side && x.line >= b.lo && x.line < b.hi &&
+    (b.close === undefined || (Math.abs(+x.g.spread_line) <= 2.5) === b.close);
   document.getElementById("heights").innerHTML = `
     <thead><tr><th>Line</th><th class="r">Season</th><th class="r">Units</th><th class="r">Since post</th></tr></thead>
     <tbody>${BUCKETS.map(b => {
       const s = tally(done.filter(x => inB(x, b))), p = tally(after.filter(x => inB(x, b)));
-      return `<tr><td>${b.label}</td><td class="r num">${wl(s)}</td><td class="r num ${cls(s.units)}">${u(s.units)}</td><td class="r num">${wl(p)}</td></tr>`;
+      return `<tr${b.close === true ? ' class="split-start"' : ""}><td>${b.label}</td><td class="r num">${wl(s)}</td><td class="r num ${cls(s.units)}">${u(s.units)}</td><td class="r num">${wl(p)}</td></tr>`;
     }).join("")}</tbody>`;
 
   // Weather: wind hurts passing and kicking, so it should help unders outdoors.
