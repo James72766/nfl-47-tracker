@@ -23,6 +23,7 @@ jobs:
       - run: python3 collect.py
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       - name: Save the snapshot
         run: |
           git config user.name "47-rule-robot"
