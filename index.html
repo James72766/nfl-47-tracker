@@ -50,7 +50,7 @@ h2 { font-size: 1.35rem; text-transform: uppercase; letter-spacing: .06em; color
 .num { font-variant-numeric: tabular-nums; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 
-.record { display: grid; gap: 14px; }
+.record, #record { display: grid; gap: 14px; }
 .big { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 .big .wl { font-family: var(--display); font-size: 3.4rem; font-weight: 700; line-height: 1; }
 .big .units { font-family: var(--display); font-size: 1.8rem; font-weight: 600; }
@@ -62,19 +62,37 @@ h2 { font-size: 1.35rem; text-transform: uppercase; letter-spacing: .06em; color
 .pos { color: var(--win); } .neg { color: var(--loss); }
 
 .plays { display: grid; gap: 8px; }
+.playshead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.tag { font-size: .8rem; font-weight: 600; color: var(--accent); background: var(--chip); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.rowlabel { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; line-height: 1.2; margin: 4px 0 -4px; }
 .play { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
   padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
 .play .m { font-weight: 600; }
 .play .t { color: var(--muted); font-size: .85rem; }
-.pick { font-family: var(--display); font-weight: 700; font-size: 1.25rem; text-align: right; grid-row: span 2; }
-.pick small { display: block; font-family: var(--body); font-weight: 500; font-size: .75rem; color: var(--muted); }
+.play .m .t { font-weight: 400; font-size: .8rem; margin-left: 6px; white-space: nowrap; }
+.pick { font-family: var(--display); font-weight: 700; font-size: 1.25rem; text-align: right; white-space: nowrap; }
+.pick small { font-family: var(--body); font-weight: 500; font-size: .75rem; color: var(--muted); margin-left: 4px; }
 .pick.over { color: var(--accent); }
+.lines { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.lines div { background: var(--chip); border-radius: 6px; padding: 5px 6px; min-width: 0;
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 4px; white-space: nowrap; }
+.lines .k { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.lines .v { font-weight: 600; }
+.lines .v.wait { font-weight: 500; color: var(--muted); font-size: .7rem; }
+.move { grid-column: 1 / -1; font-size: .8rem; color: var(--muted); }
+.wx { grid-column: 1 / -1; font-size: .85rem; font-weight: 600; color: var(--ink); }
+.wx.good { color: var(--win); } .wx.bad { color: var(--loss); } .wx.wait { color: var(--muted); font-weight: 500; }
+.move b { color: var(--ink); }
 
 .tablewrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 td { padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 td.r, th.r { text-align: right; }
+#weather td:first-child { white-space: normal; }
+#log { font-size: .85rem; }
+#log td, #log th { padding-inline: 4px; }
+#log th { white-space: nowrap; vertical-align: bottom; }
 .res { display: inline-block; min-width: 22px; text-align: center; font-weight: 700; font-size: .8rem; border-radius: 5px; padding: 1px 6px; color: #fff; }
 .res.W { background: var(--win); } .res.L { background: var(--loss); } .res.P { background: var(--push); }
 .wkhead td { background: var(--chip); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
@@ -99,8 +117,22 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   </section>
 
   <section aria-labelledby="plays-h" style="display:grid;gap:10px">
-    <h2 id="plays-h">Upcoming plays</h2>
+    <div class="playshead">
+      <h2 id="plays-h">Upcoming plays</h2>
+      <span class="tag">Vegas time · BetMGM odds</span>
+    </div>
     <div id="plays" class="plays"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="ht-h" style="display:grid;gap:10px">
+    <h2 id="ht-h">By how high the line is</h2>
+    <div class="tablewrap"><table id="heights"></table></div>
+  </section>
+
+  <section class="panel" aria-labelledby="wx-h" style="display:grid;gap:10px">
+    <h2 id="wx-h">By weather</h2>
+    <div class="tablewrap"><table id="weather"></table></div>
+    <p class="note" style="margin:0"><b>The green and red weather lines on the plays show this season's results, not a proven edge.</b> Wind is in mph at kickoff. Retractable roofs count as domes when closed, outdoors when open. Some outdoor games have no wind reading in the data.</p>
   </section>
 
   <section class="panel" aria-labelledby="wk-h" style="display:grid;gap:10px">
@@ -116,13 +148,15 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   <footer class="note" style="display:grid;gap:10px">
     <p id="stamp" style="margin:0"></p>
     <p id="robot" style="margin:0" hidden></p>
-    <p style="margin:0">Lines are the market line right before kickoff (an average across books), not BetMGM's line. Profit uses the real price on each side, 1 unit risked per bet. Scores and lines come from the free nflverse data file, which usually updates a few hours after games end.</p>
+    <p style="margin:0">The season record uses the market line right before kickoff (an average across books), so Weeks 1–7 are graded the same way. MGM open and close are BetMGM's own numbers, saved by the robot from Week 8 on. * means the robot started after that line was already posted, so it's the first number we saw, not the true opener. Profit uses the real price on each side, 1 unit risked per bet. Scores and lines come from the free nflverse data file, which usually updates a few hours after games end.</p>
     <div><button id="reload" type="button">Refresh now</button></div>
   </footer>
 </main>
 
 <script>
 const SRC = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv";
+// The robot's BetMGM snapshots, read straight from GitHub so the page works wherever it's hosted.
+const ROBOT = "https://raw.githubusercontent.com/James72766/nfl-47-tracker/main/data/";
 const SEASON = 2026;
 const THRESHOLD = 47;
 const POST_WEEK = 6; // the X post came out before Week 6
@@ -132,7 +166,7 @@ function parseCSV(text) {
   const head = lines[0].split(",");
   return lines.slice(1).map(l => {
     const cells = l.split(","), o = {};
-    head.forEach((h, i) => o[h] = cells[i] ?? "");
+    head.forEach((h, i) => o[h] = (cells[i] ?? "").replace(/^"(.*)"$/, "$1"));
     return o;
   });
 }
@@ -178,7 +212,150 @@ function vegasTime(day, time) {
   if (ph === 0) ph = 12;
   return `${wd} ${md}, ${ph}:${String(m).padStart(2, "0")}${ap} Vegas`;
 }
+// ---- Weather on the play cards ----
+// Open-air stadiums (nflverse stadium ids) and where they are, for the wind forecast.
+// Domes and retractable roofs need no forecast. Overseas grounds are open-air even
+// where the data file calls them domes.
+const OPEN_AIR = {
+  BAL00: [39.278, -76.623], BOS00: [42.091, -71.264], BUF00: [42.774, -78.787], CAR00: [35.226, -80.853],
+  CHI98: [41.862, -87.617], CIN00: [39.096, -84.516], CLE00: [41.506, -81.700], DEN00: [39.744, -105.020],
+  GNB00: [44.501, -88.062], JAX00: [30.324, -81.637], KAN00: [39.049, -94.484], MIA00: [25.958, -80.239],
+  NAS00: [36.167, -86.771], NYC01: [40.814, -74.075], PHI00: [39.901, -75.168], PIT00: [40.447, -80.016],
+  SEA00: [47.595, -122.332], SFO01: [37.403, -121.970], TAM00: [27.976, -82.503], WAS00: [38.908, -76.865],
+  LON00: [51.556, -0.280], LON02: [51.604, -0.066], GER00: [48.219, 11.625], MUN01: [48.219, 11.625],
+  PAR00: [48.925, 2.360], MEL00: [-37.820, 144.983], MEX00: [19.303, -99.151], MAD01: [40.453, -3.688],
+  SAO00: [-23.545, -46.474], RIO00: [-22.912, -43.230],
+};
+const RETRACTABLE = ["ATL97", "DAL00", "HOU00", "IND00", "PHO00"]; // almost always closed
+
+// Kickoff in UTC from nflverse's Eastern date and time.
+function kickoffUTC(day, time) {
+  const guess = Date.parse(`${day}T${time}:00Z`) + 4 * 36e5;
+  const tz = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeZoneName: "shortOffset" })
+    .formatToParts(new Date(guess)).find(p => p.type === "timeZoneName").value;
+  return Date.parse(`${day}T${time}:00Z`) - (parseInt(tz.replace("GMT", ""), 10) || -5) * 36e5;
+}
+
+// Forecast wind (mph) at the stadium for the kickoff hour, from Open-Meteo (free, no key).
+async function forecastWind([lat, lon], kickMs) {
+  const day = new Date(kickMs).toISOString().slice(0, 10);
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&hourly=wind_speed_10m&wind_speed_unit=mph&timezone=UTC&start_date=${day}&end_date=${day}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const h = (await res.json()).hourly;
+  const hour = new Date(Math.round(kickMs / 36e5) * 36e5).toISOString().slice(0, 13) + ":00";
+  const i = h.time.indexOf(hour);
+  return i < 0 ? null : Math.round(h.wind_speed_10m[i]);
+}
+
+// Does the weather back the pick? Returns [class, text]: good = green, bad = red, even = black.
+async function weatherCall(g, side, domeRecord) {
+  const domed = g.roof === "dome" || g.roof === "closed" || (g.roof === "" && RETRACTABLE.includes(g.stadium_id));
+  if (domed && !OPEN_AIR[g.stadium_id]) {
+    const t = domeRecord[side];
+    const word = side === "over" ? "OVERS" : "UNDERS";
+    return t.units >= 0 ? ["good", `✓ Dome · ${word} ${wl(t)} in domes this season`]
+                        : ["bad", `⚠ Dome · ${word} only ${wl(t)} in domes this season`];
+  }
+  const spot = OPEN_AIR[g.stadium_id];
+  if (!spot) return ["even", "— Weather not available"];
+  const mph = await forecastWind(spot, kickoffUTC(g.gameday, g.gametime));
+  if (mph === null) return ["even", "— Wind forecast not out yet"];
+  if (mph < WIND_MPH) return ["even", `— Calm · ${mph} mph · no edge either way`];
+  return side === "under" ? ["good", `↓ Wind ${mph} mph · helps your UNDER`]
+                          : ["bad", `⚠ Wind ${mph} mph · works against your OVER`];
+}
+const WIND_MPH = 12;
+
+// Which weather bucket a finished game falls in (the "By weather" table and the dome record).
+function sky(g) {
+  if ((g.roof === "dome" || g.roof === "closed") && !OPEN_AIR[g.stadium_id]) return "Dome";
+  if (g.wind === "") return "Outside, no wind data";
+  return +g.wind >= WIND_MPH ? `Outside, wind ${WIND_MPH}+` : "Outside, calm";
+}
+
+// Short form for the play cards: "Sun 10/25 6:30am" (Vegas time).
+function shortTime(day, time) {
+  const [, mo, dd] = day.split("-").map(Number);
+  const wd = new Date(day + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  return `${wd} ${mo}/${dd} ` + vegasTime(day, time).split(", ")[1].replace(" Vegas", "").replace(":00", "");
+}
 const price = o => { const n = parseInt(o, 10); return n ? (n > 0 ? "+" + n : String(n)) : "—"; };
+const fmtLine = n => (+n).toFixed(1).replace(/\.0$/, "");
+
+// ---- BetMGM line history (opener → morning → close) ----
+let mgm = [];          // every saved BetMGM row
+let robotStart = null; // first moment the robot ever ran
+let lastCheck = null;  // the robot's most recent check that found lines
+// From here on the robot saves every pregame game on every check, so a game
+// missing from the latest check has been pulled off the board.
+const EVERY_CHECK_FROM = "2026-10-23T21:05:00Z";
+
+// 8:00am Las Vegas time on the day of kickoff, as a timestamp.
+function vegasMorning(kickMs) {
+  const d = new Date(kickMs);
+  const day = d.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+  const tz = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", timeZoneName: "shortOffset" })
+    .formatToParts(d).find(p => p.type === "timeZoneName").value; // e.g. "GMT-7"
+  const offset = parseInt(tz.replace("GMT", ""), 10) || -8;
+  return Date.parse(day + "T08:00:00Z") - offset * 36e5;
+}
+
+// Opener, game-day morning and closing BetMGM lines for one nflverse game.
+function mgmLines(g) {
+  const near = Date.parse(g.gameday + "T12:00:00Z");
+  const rows = mgm.filter(r =>
+    ((r.away === g.away_team && r.home === g.home_team) || (r.away === g.home_team && r.home === g.away_team)) &&
+    Math.abs(Date.parse(r.kickoff_utc) - near) < 2 * 864e5
+  ).sort((a, b) => a.seen_at_utc < b.seen_at_utc ? -1 : 1);
+  if (!rows.length) return null;
+  const kick = Date.parse(rows[rows.length - 1].kickoff_utc);
+  const asOf = t => { let hit = null; rows.forEach(r => { if (Date.parse(r.seen_at_utc) <= t) hit = r; }); return hit; };
+  const morningAt = vegasMorning(kick);
+  const now = Date.now();
+  return {
+    open: rows[0],
+    lateStart: rows[0].seen_at_utc === robotStart, // robot started after this line was already up
+    morning: morningAt < kick && now >= morningAt ? asOf(morningAt) : null,
+    morningNA: morningAt >= kick,                  // kickoff before 8am (London games)
+    close: now >= kick ? asOf(kick) : null,
+    current: asOf(Math.min(now, kick)),
+    kick,
+    offBoard: now < kick && lastCheck >= EVERY_CHECK_FROM && rows[rows.length - 1].seen_at_utc < lastCheck,
+    lastSeen: rows[rows.length - 1].seen_at_utc,
+  };
+}
+
+const vegasStamp = iso => new Date(iso).toLocaleString("en-US",
+  { timeZone: "America/Los_Angeles", weekday: "short", hour: "numeric", minute: "2-digit" });
+
+function lineCell(label, row, waitText) {
+  return `<div><span class="k">${label}</span>${row
+    ? `<span class="v num">${fmtLine(row.total)}</span>`
+    : `<span class="v wait">${waitText}</span>`}</div>`;
+}
+
+// "1h 32m" from a gap in milliseconds.
+function gap(ms) {
+  const mins = Math.max(0, Math.round(ms / 6e4));
+  return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+}
+
+function moveText(m) {
+  const to = m.close || m.current;
+  const diff = +to.total - +m.open.total;
+  const word = m.close ? "Closed" : "Now";
+  const moved = diff === 0 ? "no move" : `moved <b>${diff > 0 ? "+" : ""}${fmtLine(diff)}</b>`;
+  // When each checkpoint was actually seen, so a "close" from hours before kickoff is obvious.
+  const seen = [];
+  if (m.morning) seen.push(`morning seen ${new Date(m.morning.seen_at_utc).toLocaleTimeString("en-US",
+    { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" }).replace(" ", "").toLowerCase()}`);
+  if (m.close) seen.push(`close seen ${gap(m.kick - Date.parse(m.close.seen_at_utc))} before kickoff`);
+  return `${word} ${fmtLine(to.total)} vs open ${fmtLine(m.open.total)}: ${moved}` +
+    (seen.length ? " · " + seen.join(" · ") : "") +
+    (m.lateStart ? " · open = first number we saw (robot started Oct 23)" : "");
+}
 
 function render(rows) {
   const season = rows.filter(r => +r.season === SEASON && r.game_type === "REG" && r.total_line !== "");
@@ -189,7 +366,11 @@ function render(rows) {
   const all = tally(done);
   const ov = tally(done.filter(x => x.side === "over"));
   const un = tally(done.filter(x => x.side === "under"));
-  const since = tally(done.filter(x => +x.g.week >= POST_WEEK));
+  const after = done.filter(x => +x.g.week >= POST_WEEK);
+  const since = tally(after);
+  const sinceOv = tally(after.filter(x => x.side === "over"));
+  const sinceUn = tally(after.filter(x => x.side === "under"));
+  const box = (k, t) => `<div class="split"><div class="k">${k}</div><div class="v num">${wl(t)}</div><div class="u num ${cls(t.units)}">${u(t.units)}</div></div>`;
 
   document.getElementById("record").innerHTML = `
     <div class="big">
@@ -197,22 +378,74 @@ function render(rows) {
       <span class="units num ${cls(all.units)}">${u(all.units)}</span>
     </div>
     <p class="note" style="margin:0">${done.length} games graded · wins ${pct(all)} of the time (you need 52.4% to beat -110)</p>
-    <div class="splits">
-      <div class="split"><div class="k">Overs</div><div class="v num">${wl(ov)}</div><div class="u num ${cls(ov.units)}">${u(ov.units)}</div></div>
-      <div class="split"><div class="k">Unders</div><div class="v num">${wl(un)}</div><div class="u num ${cls(un.units)}">${u(un.units)}</div></div>
-      <div class="split"><div class="k">Since X post</div><div class="v num">${wl(since)}</div><div class="u num ${cls(since.units)}">${u(since.units)}</div></div>
-    </div>`;
+    <div class="rowlabel">Whole season</div>
+    <div class="splits">${box("Overs", ov)}${box("Unders", un)}${box("Total", all)}</div>
+    <div class="rowlabel">Since the X post (Week ${POST_WEEK} on)</div>
+    <div class="splits">${box("Overs", sinceOv)}${box("Unders", sinceUn)}${box("Total", since)}</div>`;
 
   const nextWeek = upcoming.length ? Math.min(...upcoming.map(x => +x.g.week)) : null;
   const plays = upcoming.filter(x => +x.g.week === nextWeek);
   document.getElementById("plays-h").textContent = nextWeek ? `Week ${nextWeek} plays` : "Upcoming plays";
-  document.getElementById("plays").innerHTML = plays.length ? plays.map(x => `
+  const domeGames = done.filter(x => sky(x.g) === "Dome");
+  const domeRecord = { over: tally(domeGames.filter(x => x.side === "over")), under: tally(domeGames.filter(x => x.side === "under")) };
+  const sides = {};
+  document.getElementById("plays").innerHTML = plays.length ? plays.map(x => {
+    const m = mgmLines(x.g);
+    // Pick from BetMGM's current number when it's on the board; otherwise the market average.
+    const live = m && !m.offBoard;
+    const line = live ? +m.current.total : x.line;
+    const side = line >= THRESHOLD ? "over" : "under";
+    sides[x.g.game_id] = side;
+    const odds = live ? (side === "over" ? m.current.over_price : m.current.under_price) : x.odds;
+    return `
     <div class="play">
-      <div class="m">${x.g.away_team} @ ${x.g.home_team}</div>
-      <div class="pick ${x.side}">${x.side === "over" ? "OVER" : "UNDER"} ${x.line}<small class="num">${price(x.odds)}</small></div>
-      <div class="t">${vegasTime(x.g.gameday, x.g.gametime)}</div>
-    </div>`).join("") + `<p class="note" style="margin:0">These lines move during the week. Check BetMGM's number before you bet. A game that crosses 47 flips sides.</p>`
+      <div class="m">${x.g.away_team} @ ${x.g.home_team}<span class="t">${shortTime(x.g.gameday, x.g.gametime)}</span></div>
+      <div class="pick ${side}">${side === "over" ? "OVER" : "UNDER"} ${fmtLine(line)}<small class="num">${price(odds)}${live ? "" : " avg"}</small></div>
+      ${m && m.offBoard ? `<div class="wx bad">⚠ BetMGM line not showing in latest check · last seen ${fmtLine(m.current.total)} at ${vegasStamp(m.lastSeen)}</div>` : ""}
+      <div class="wx wait" id="wx-${x.g.game_id}">Checking weather…</div>
+      ${m ? `<div class="lines">
+        ${lineCell("Open", m.open, "—")}
+        ${lineCell("Morning", m.morning, m.morningNA ? "early kick" : "8am")}
+        ${lineCell("Close", m.close, "kickoff")}
+      </div>
+      <div class="move">${moveText(m)}</div>` : ""}
+    </div>`;
+  }).join("") + `<p class="note" style="margin:0">BetMGM lines move during the week. A game that crosses 47 flips sides.</p>`
     : `<p class="note">No upcoming games with a line yet.</p>`;
+  plays.forEach(async x => {
+    const el = document.getElementById("wx-" + x.g.game_id);
+    try {
+      const [kind, text] = await weatherCall(x.g, sides[x.g.game_id], domeRecord);
+      el.className = "wx " + kind; el.textContent = text;
+    } catch (e) { el.className = "wx"; el.textContent = "— Weather not available"; }
+  });
+
+  // Line-height buckets: does a higher over (or lower under) hit more often?
+  const BUCKETS = [
+    { side: "over", label: "Over 53+", lo: 53, hi: 99 },
+    { side: "over", label: "Over 50–52.5", lo: 50, hi: 53 },
+    { side: "over", label: "Over 47–49.5", lo: 47, hi: 50 },
+    { side: "under", label: "Under 44–46.5", lo: 44, hi: 47 },
+    { side: "under", label: "Under 41–43.5", lo: 41, hi: 44 },
+    { side: "under", label: "Under 40.5 or less", lo: 0, hi: 41 },
+  ];
+  const inB = (x, b) => x.side === b.side && x.line >= b.lo && x.line < b.hi;
+  document.getElementById("heights").innerHTML = `
+    <thead><tr><th>Line</th><th class="r">Season</th><th class="r">Units</th><th class="r">Since post</th></tr></thead>
+    <tbody>${BUCKETS.map(b => {
+      const s = tally(done.filter(x => inB(x, b))), p = tally(after.filter(x => inB(x, b)));
+      return `<tr><td>${b.label}</td><td class="r num">${wl(s)}</td><td class="r num ${cls(s.units)}">${u(s.units)}</td><td class="r num">${wl(p)}</td></tr>`;
+    }).join("")}</tbody>`;
+
+  // Weather: wind hurts passing and kicking, so it should help unders outdoors.
+  const SKIES = ["Dome", "Outside, calm", `Outside, wind ${WIND_MPH}+`, "Outside, no wind data"];
+  document.getElementById("weather").innerHTML = `
+    <thead><tr><th>Where</th><th class="r">Overs</th><th class="r">Unders</th><th class="r">Units</th></tr></thead>
+    <tbody>${SKIES.map(k => {
+      const set = done.filter(x => sky(x.g) === k);
+      const a = tally(set), o = tally(set.filter(x => x.side === "over")), n = tally(set.filter(x => x.side === "under"));
+      return `<tr><td>${k}</td><td class="r num">${wl(o)}</td><td class="r num">${wl(n)}</td><td class="r num ${cls(a.units)}">${u(a.units)}</td></tr>`;
+    }).join("")}</tbody>`;
 
   const weeks = [...new Set(done.map(x => +x.g.week))].sort((a, b) => a - b);
   document.getElementById("weeks").innerHTML = `
@@ -225,25 +458,40 @@ function render(rows) {
 
   const byWeekDesc = [...weeks].reverse();
   document.getElementById("log").innerHTML = `
-    <thead><tr><th>Game</th><th>Bet</th><th class="r">Final</th><th class="r">Result</th></tr></thead>
+    <thead><tr><th>Game</th><th>Bet</th><th class="r">MGM<br>open→close</th><th class="r">Pts</th><th class="r"></th></tr></thead>
     <tbody>${byWeekDesc.map(w => {
       const wk = done.filter(x => +x.g.week === w).reverse();
-      return `<tr class="wkhead"><td colspan="4">Week ${w}</td></tr>` + wk.map(x => `
+      return `<tr class="wkhead"><td colspan="5">Week ${w}</td></tr>` + wk.map(x => {
+        const m = mgmLines(x.g);
+        const mgmCell = m ? `${fmtLine(m.open.total)}${m.lateStart ? "*" : ""}→${m.close ? fmtLine(m.close.total) : "?"}` : "—";
+        return `
         <tr>
-          <td>${x.g.away_team} ${x.g.away_score} @ ${x.g.home_team} ${x.g.home_score}</td>
+          <td>${x.g.away_team} @ ${x.g.home_team}</td>
           <td>${x.side === "over" ? "O" : "U"} ${x.line} <span class="note num">${price(x.odds)}</span></td>
+          <td class="r num">${mgmCell}</td>
           <td class="r num">${x.pts}</td>
           <td class="r"><span class="res ${x.res}">${x.res}</span></td>
-        </tr>`).join("");
+        </tr>`;
+      }).join("");
     }).join("")}</tbody>`;
 
   document.getElementById("stamp").textContent =
     "Checked " + new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "short" }) + " Vegas time.";
 }
 
+async function loadMgm() {
+  try {
+    const res = await fetch(ROBOT + "betmgm-lines.csv?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    mgm = parseCSV(await res.text());
+    robotStart = mgm.reduce((a, r) => !a || r.seen_at_utc < a ? r.seen_at_utc : a, null);
+    lastCheck = mgm.reduce((a, r) => !a || r.seen_at_utc > a ? r.seen_at_utc : a, null);
+  } catch (e) { /* page still works on the season file alone */ }
+}
+
 async function load() {
   try {
-    const res = await fetch(SRC + "?t=" + Date.now(), { cache: "no-store" });
+    const [res] = await Promise.all([fetch(SRC + "?t=" + Date.now(), { cache: "no-store" }), loadMgm()]);
     if (!res.ok) throw new Error("status " + res.status);
     render(parseCSV(await res.text()));
   } catch (e) {
@@ -255,7 +503,7 @@ async function load() {
 async function loadRobot() {
   const el = document.getElementById("robot");
   try {
-    const res = await fetch("data/robot-runs.csv?t=" + Date.now(), { cache: "no-store" });
+    const res = await fetch(ROBOT + "robot-runs.csv?t=" + Date.now(), { cache: "no-store" });
     if (!res.ok) return;
     const runs = parseCSV(await res.text());
     const last = runs[runs.length - 1];
