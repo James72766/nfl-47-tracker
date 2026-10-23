@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="47 Rule">
+<title>47 Rule Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow scoreboard column — record up top, this week's plays, then the week-by-week and game log. */
+:root {
+  --bg: #f3f5f2;
+  --panel: #ffffff;
+  --ink: #15201b;
+  --muted: #5d6b64;
+  --line: #dbe1dc;
+  --accent: #1f6b4a;
+  --win: #1f7a4d;
+  --loss: #b4372f;
+  --push: #8a7a3a;
+  --chip: #e6ece7;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "Barlow", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1613; --panel: #18211d; --ink: #e8eee9; --muted: #93a39a;
+    --line: #2a3530; --accent: #5cc493; --win: #5cc493; --loss: #ef7b70;
+    --push: #d5c37a; --chip: #223029; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font: 16px/1.45 var(--body);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 720px; margin: 0 auto; display: grid; gap: 22px; padding-block: 18px; }
+h1, h2 { font-family: var(--display); font-weight: 700; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+h1 { font-size: 2.1rem; line-height: 1; }
+h2 { font-size: 1.35rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.sub { color: var(--muted); font-size: .9rem; margin: 6px 0 0; }
+.num { font-variant-numeric: tabular-nums; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+
+.record { display: grid; gap: 14px; }
+.big { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.big .wl { font-family: var(--display); font-size: 3.4rem; font-weight: 700; line-height: 1; }
+.big .units { font-family: var(--display); font-size: 1.8rem; font-weight: 600; }
+.splits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.split { background: var(--chip); border-radius: 8px; padding: 10px; min-width: 0; }
+.split .k { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.split .v { font-family: var(--display); font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+.split .u { font-size: .85rem; }
+.pos { color: var(--win); } .neg { color: var(--loss); }
+
+.plays { display: grid; gap: 8px; }
+.play { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
+  padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.play .m { font-weight: 600; }
+.play .t { color: var(--muted); font-size: .85rem; }
+.pick { font-family: var(--display); font-weight: 700; font-size: 1.25rem; text-align: right; grid-row: span 2; }
+.pick small { display: block; font-family: var(--body); font-weight: 500; font-size: .75rem; color: var(--muted); }
+.pick.over { color: var(--accent); }
+
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td.r, th.r { text-align: right; }
+.res { display: inline-block; min-width: 22px; text-align: center; font-weight: 700; font-size: .8rem; border-radius: 5px; padding: 1px 6px; color: #fff; }
+.res.W { background: var(--win); } .res.L { background: var(--loss); } .res.P { background: var(--push); }
+.wkhead td { background: var(--chip); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+
+.note { color: var(--muted); font-size: .85rem; }
+.err { color: var(--loss); }
+button { font: 600 .9rem var(--body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 420px) { .big .wl { font-size: 2.8rem; } .split .v { font-size: 1.25rem; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>47 Rule Tracker</h1>
+    <p class="sub">Line 47 or higher: bet the over. Under 47: bet the under. Every game this NFL season, graded automatically.</p>
+  </header>
+
+  <section class="panel record" aria-labelledby="rec-h">
+    <h2 id="rec-h">Season record</h2>
+    <div id="record"><p class="note">Loading this season's games…</p></div>
+  </section>
+
+  <section aria-labelledby="plays-h" style="display:grid;gap:10px">
+    <h2 id="plays-h">Upcoming plays</h2>
+    <div id="plays" class="plays"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="wk-h" style="display:grid;gap:10px">
+    <h2 id="wk-h">Week by week</h2>
+    <div class="tablewrap"><table id="weeks"></table></div>
+  </section>
+
+  <section class="panel" aria-labelledby="log-h" style="display:grid;gap:10px">
+    <h2 id="log-h">Every game</h2>
+    <div class="tablewrap"><table id="log"></table></div>
+  </section>
+
+  <footer class="note" style="display:grid;gap:10px">
+    <p id="stamp" style="margin:0"></p>
+    <p id="robot" style="margin:0" hidden></p>
+    <p style="margin:0">Lines are the market line right before kickoff (an average across books), not BetMGM's line. Profit uses the real price on each side, 1 unit risked per bet. Scores and lines come from the free nflverse data file, which usually updates a few hours after games end.</p>
+    <div><button id="reload" type="button">Refresh now</button></div>
+  </footer>
+</main>
+
+<script>
+const SRC = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv";
+const SEASON = 2026;
+const THRESHOLD = 47;
+const POST_WEEK = 6; // the X post came out before Week 6
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  const head = lines[0].split(",");
+  return lines.slice(1).map(l => {
+    const cells = l.split(","), o = {};
+    head.forEach((h, i) => o[h] = cells[i] ?? "");
+    return o;
+  });
+}
+
+// Profit on a 1-unit risk at American odds; -110 if the price is missing.
+function winUnits(odds) {
+  const o = parseInt(odds, 10);
+  if (!o) return 100 / 110;
+  return o > 0 ? o / 100 : 100 / -o;
+}
+
+function grade(g) {
+  const line = parseFloat(g.total_line);
+  const side = line >= THRESHOLD ? "over" : "under";
+  const odds = side === "over" ? g.over_odds : g.under_odds;
+  if (g.home_score === "" || g.away_score === "") return { line, side, odds, done: false };
+  const pts = +g.home_score + +g.away_score;
+  let res, units;
+  if (pts === line) { res = "P"; units = 0; }
+  else if ((pts > line) === (side === "over")) { res = "W"; units = winUnits(odds); }
+  else { res = "L"; units = -1; }
+  return { line, side, odds, done: true, pts, res, units };
+}
+
+function tally(list) {
+  const t = { W: 0, L: 0, P: 0, units: 0 };
+  list.forEach(x => { t[x.res]++; t.units += x.units; });
+  return t;
+}
+const wl = t => `${t.W}–${t.L}${t.P ? "–" + t.P : ""}`;
+const u = n => `${n >= 0 ? "+" : ""}${n.toFixed(2)}u`;
+const cls = n => n >= 0 ? "pos" : "neg";
+const pct = t => (t.W + t.L) ? ((t.W / (t.W + t.L)) * 100).toFixed(1) + "%" : "—";
+
+// nflverse kickoff times are US Eastern; show Las Vegas time.
+function vegasTime(day, time) {
+  const [h, m] = time.split(":").map(Number);
+  const d = new Date(day + "T12:00:00Z");
+  const wd = d.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  const md = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  let ph = h - 3, ap = "am";
+  if (ph >= 12) { ap = "pm"; if (ph > 12) ph -= 12; }
+  if (ph === 0) ph = 12;
+  return `${wd} ${md}, ${ph}:${String(m).padStart(2, "0")}${ap} Vegas`;
+}
+const price = o => { const n = parseInt(o, 10); return n ? (n > 0 ? "+" + n : String(n)) : "—"; };
+
+function render(rows) {
+  const season = rows.filter(r => +r.season === SEASON && r.game_type === "REG" && r.total_line !== "");
+  const games = season.map(g => ({ g, ...grade(g) }));
+  const done = games.filter(x => x.done);
+  const upcoming = games.filter(x => !x.done);
+
+  const all = tally(done);
+  const ov = tally(done.filter(x => x.side === "over"));
+  const un = tally(done.filter(x => x.side === "under"));
+  const since = tally(done.filter(x => +x.g.week >= POST_WEEK));
+
+  document.getElementById("record").innerHTML = `
+    <div class="big">
+      <span class="wl num">${wl(all)}</span>
+      <span class="units num ${cls(all.units)}">${u(all.units)}</span>
+    </div>
+    <p class="note" style="margin:0">${done.length} games graded · wins ${pct(all)} of the time (you need 52.4% to beat -110)</p>
+    <div class="splits">
+      <div class="split"><div class="k">Overs</div><div class="v num">${wl(ov)}</div><div class="u num ${cls(ov.units)}">${u(ov.units)}</div></div>
+      <div class="split"><div class="k">Unders</div><div class="v num">${wl(un)}</div><div class="u num ${cls(un.units)}">${u(un.units)}</div></div>
+      <div class="split"><div class="k">Since X post</div><div class="v num">${wl(since)}</div><div class="u num ${cls(since.units)}">${u(since.units)}</div></div>
+    </div>`;
+
+  const nextWeek = upcoming.length ? Math.min(...upcoming.map(x => +x.g.week)) : null;
+  const plays = upcoming.filter(x => +x.g.week === nextWeek);
+  document.getElementById("plays-h").textContent = nextWeek ? `Week ${nextWeek} plays` : "Upcoming plays";
+  document.getElementById("plays").innerHTML = plays.length ? plays.map(x => `
+    <div class="play">
+      <div class="m">${x.g.away_team} @ ${x.g.home_team}</div>
+      <div class="pick ${x.side}">${x.side === "over" ? "OVER" : "UNDER"} ${x.line}<small class="num">${price(x.odds)}</small></div>
+      <div class="t">${vegasTime(x.g.gameday, x.g.gametime)}</div>
+    </div>`).join("") + `<p class="note" style="margin:0">These lines move during the week. Check BetMGM's number before you bet. A game that crosses 47 flips sides.</p>`
+    : `<p class="note">No upcoming games with a line yet.</p>`;
+
+  const weeks = [...new Set(done.map(x => +x.g.week))].sort((a, b) => a - b);
+  document.getElementById("weeks").innerHTML = `
+    <thead><tr><th>Week</th><th class="r">Overs</th><th class="r">Unders</th><th class="r">Total</th><th class="r">Units</th></tr></thead>
+    <tbody>${weeks.map(w => {
+      const wk = done.filter(x => +x.g.week === w);
+      const a = tally(wk), o = tally(wk.filter(x => x.side === "over")), n = tally(wk.filter(x => x.side === "under"));
+      return `<tr><td>Week ${w}</td><td class="r num">${wl(o)}</td><td class="r num">${wl(n)}</td><td class="r num">${wl(a)}</td><td class="r num ${cls(a.units)}">${u(a.units)}</td></tr>`;
+    }).join("")}</tbody>`;
+
+  const byWeekDesc = [...weeks].reverse();
+  document.getElementById("log").innerHTML = `
+    <thead><tr><th>Game</th><th>Bet</th><th class="r">Final</th><th class="r">Result</th></tr></thead>
+    <tbody>${byWeekDesc.map(w => {
+      const wk = done.filter(x => +x.g.week === w).reverse();
+      return `<tr class="wkhead"><td colspan="4">Week ${w}</td></tr>` + wk.map(x => `
+        <tr>
+          <td>${x.g.away_team} ${x.g.away_score} @ ${x.g.home_team} ${x.g.home_score}</td>
+          <td>${x.side === "over" ? "O" : "U"} ${x.line} <span class="note num">${price(x.odds)}</span></td>
+          <td class="r num">${x.pts}</td>
+          <td class="r"><span class="res ${x.res}">${x.res}</span></td>
+        </tr>`).join("");
+    }).join("")}</tbody>`;
+
+  document.getElementById("stamp").textContent =
+    "Checked " + new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "short" }) + " Vegas time.";
+}
+
+async function load() {
+  try {
+    const res = await fetch(SRC + "?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("status " + res.status);
+    render(parseCSV(await res.text()));
+  } catch (e) {
+    document.getElementById("record").innerHTML =
+      `<p class="err">Couldn't load the game data (${e.message}). Check your connection, then tap Refresh now.</p>`;
+  }
+}
+// The BetMGM robot's last check, from this site's own data folder.
+async function loadRobot() {
+  const el = document.getElementById("robot");
+  try {
+    const res = await fetch("data/robot-runs.csv?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    const runs = parseCSV(await res.text());
+    const last = runs[runs.length - 1];
+    const when = new Date(last.run_at_utc);
+    const hours = (Date.now() - when) / 36e5;
+    el.textContent = `BetMGM robot last checked ${when.toLocaleString("en-US", { timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "short" })} Vegas time · ${last.credits_left} free checks left this month` +
+      (hours > 4 ? " · WARNING: robot hasn't checked in over 4 hours" : "");
+    if (hours > 4) el.className = "err";
+    el.hidden = false;
+  } catch (e) { /* page still works without the robot file */ }
+}
+document.getElementById("reload").addEventListener("click", () => { load(); loadRobot(); });
+load();
+loadRobot();
+</script>
+</body>
+</html>

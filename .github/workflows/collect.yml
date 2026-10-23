@@ -1,0 +1,33 @@
+# Takes a BetMGM snapshot on a schedule. Times are UTC.
+# Free plan = 500 calls a month; this schedule uses about 420.
+name: BetMGM snapshot
+
+on:
+  schedule:
+    - cron: "50 */2 * * *"        # every 2 hours (14:50 UTC = 7:50am Vegas until Nov 1)
+    - cron: "50 15 * * *"         # 7:50am Vegas after clocks change on Nov 1
+    - cron: "50 23 * * 0"         # Sunday night, when openers come out
+    - cron: "50 1,3,5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: snapshot
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 collect.py
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      - name: Save the snapshot
+        run: |
+          git config user.name "47-rule-robot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          git commit -m "BetMGM snapshot" || exit 0
+          git pull --rebase
+          git push
