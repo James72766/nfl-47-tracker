@@ -262,17 +262,22 @@ async function weatherCall(g, side, domeRecord) {
   if (!spot) return ["even", "— Weather not available"];
   const mph = await forecastWind(spot, kickoffUTC(g.gameday, g.gametime));
   if (mph === null) return ["even", "— Wind forecast not out yet"];
-  if (mph < WIND_MPH) return ["even", `— Calm · ${mph} mph · no edge either way`];
-  return side === "under" ? ["good", `↓ Wind ${mph} mph · helps your UNDER`]
+  if (mph < 10) return ["even", `— Calm · ${mph} mph · no edge either way`];
+  // 10–15 mph is the zone: unders 226–151 (60%) at kickoff wind, 2018–2026, even on 47+ lines.
+  // Bigger wind gets priced in by the books, so 16+ is only a weaker warning.
+  if (mph <= 15) return side === "under"
+    ? ["good", `↓ Wind ${mph} mph · 10–15 zone: UNDERS hit 60% since 2018`]
+    : ["bad", `⚠ Wind ${mph} mph · 10–15 zone: UNDERS hit 60%, even on 47+ lines`];
+  return side === "under" ? ["good", `↓ Wind ${mph} mph · helps your UNDER (weaker than 10–15)`]
                           : ["bad", `⚠ Wind ${mph} mph · works against your OVER`];
 }
-const WIND_MPH = 12;
 
 // Which weather bucket a finished game falls in (the "By weather" table and the dome record).
 function sky(g) {
   if ((g.roof === "dome" || g.roof === "closed") && !OPEN_AIR[g.stadium_id]) return "Dome";
   if (g.wind === "") return "Outside, no wind data";
-  return +g.wind >= WIND_MPH ? `Outside, wind ${WIND_MPH}+` : "Outside, calm";
+  if (+g.wind < 10) return "Outside, calm";
+  return +g.wind <= 15 ? "Outside, wind 10–15" : "Outside, wind 16+";
 }
 
 // Short form for the play cards: "Sun 10/25 6:30am" (Vegas time).
@@ -438,7 +443,7 @@ function render(rows) {
     }).join("")}</tbody>`;
 
   // Weather: wind hurts passing and kicking, so it should help unders outdoors.
-  const SKIES = ["Dome", "Outside, calm", `Outside, wind ${WIND_MPH}+`, "Outside, no wind data"];
+  const SKIES = ["Dome", "Outside, calm", "Outside, wind 10–15", "Outside, wind 16+", "Outside, no wind data"];
   document.getElementById("weather").innerHTML = `
     <thead><tr><th>Where</th><th class="r">Overs</th><th class="r">Unders</th><th class="r">Units</th></tr></thead>
     <tbody>${SKIES.map(k => {
