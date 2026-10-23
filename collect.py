@@ -14,6 +14,11 @@ openers appear, one when a line crosses 47 and flips the bet.
 For open-air games it also saves the wind forecast for the kickoff hour
 (Open-Meteo, free) to data/wind-forecasts.csv, so the 10–15 mph wind idea can
 later be tested on what the forecast said when you'd bet, not kickoff wind.
+
+And it checks two research rules (bad defenses → under, low-scoring team →
+over) on every game, saving the result and the stats behind it to
+data/research-flags.csv. The page grades each rule from the last check before
+kickoff, so a flag is never rebuilt afterward from updated data.
 """
 import csv
 import json
@@ -35,6 +40,11 @@ WIND = os.path.join(HERE, "data", "wind-forecasts.csv")
 WIND_COLS = ["seen_at_utc", "event_id", "kickoff_utc", "away", "home", "stadium_id",
              "forecast_hour_utc", "wind_mph", "gust_mph", "temp_f"]
 GAMES_CSV = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
+FLAGS = os.path.join(HERE, "data", "research-flags.csv")
+FLAG_COLS = ["seen_at_utc", "event_id", "kickoff_utc", "away", "home", "total", "over_price",
+             "under_price", "ref_spread_line", "home_prior_games", "home_pf", "home_pa",
+             "away_prior_games", "away_pf", "away_pa", "r2_bad_def_under", "r2_4plus",
+             "r3_low_scoring_over", "r3_teams", "r3_4plus"]
 # Open-air stadiums (nflverse ids) and where they are. Domes and retractable
 # roofs are skipped. Overseas grounds are open-air even where nflverse says dome.
 OPEN_AIR = {
@@ -162,31 +172,114 @@ def main():
           f"{credits_left} credits left")
     for title, message in alerts_for(last, moved):
         send(title, message)
-    try:  # weather is extra; a failure here must never cost the odds snapshot
-        wind = wind_rows(rows, now)
+    # Weather and research flags are extras; a failure here must never cost the odds snapshot.
+    try:
+        sched = schedule()
+    except Exception as e:
+        print(f"nflverse schedule not loaded, wind and flags skipped: {e}")
+        return
+    try:
+        wind = wind_rows(rows, now, sched)
         if wind:
             append_rows(WIND, WIND_COLS, wind)
         print(f"wind forecasts saved for {len(wind)} open-air games")
     except Exception as e:
         print(f"wind forecasts not saved: {e}")
+    try:
+        flags = flag_rows(rows, sched)
+        if flags:
+            append_rows(FLAGS, FLAG_COLS, flags)
+        print(f"research flags checked for {len(flags)} games "
+              f"({sum(int(f['r2_bad_def_under']) for f in flags)} bad-defense, "
+              f"{sum(int(f['r3_low_scoring_over']) for f in flags)} low-scoring)")
+    except Exception as e:
+        print(f"research flags not saved: {e}")
 
 
-def stadiums():
-    """Each upcoming game's stadium from the nflverse schedule: {(team, team): [(kickoff, id)]}."""
+def schedule():
+    """The nflverse schedule and results, each game with its kickoff as a datetime."""
     with urllib.request.urlopen(GAMES_CSV, timeout=60) as resp:
         text = resp.read().decode()
-    out = {}
+    games = []
     for g in csv.DictReader(text.splitlines()):
-        if not g["gameday"] or not g["gametime"]:
+        g = {k: v.strip('"') for k, v in g.items()}
+        if g["gameday"] and g["gametime"]:
+            g["kick"] = datetime.fromisoformat(f"{g['gameday']}T{g['gametime']}").replace(tzinfo=EASTERN)
+            games.append(g)
+    return games
+
+
+def match(sched, r):
+    """The nflverse game for one of our BetMGM rows (same two teams, kickoff within 36 hours)."""
+    kick = datetime.fromisoformat(r["kickoff_utc"].replace("Z", "+00:00"))
+    pair = {r["away"], r["home"]}
+    hits = [g for g in sched if {g["away_team"], g["home_team"]} == pair
+            and abs((g["kick"] - kick).total_seconds()) < 36 * 3600]
+    return hits[0] if hits else None
+
+
+def pregame(sched, g, team):
+    """Team's current-season regular-season games before this one: (count, points for/game, against/game)."""
+    pf = pa = n = 0
+    for h in sched:
+        if (h["season"] == g["season"] and h["game_type"] == "REG" and h["home_score"] != ""
+                and h["gameday"] < g["gameday"] and team in (h["home_team"], h["away_team"])):
+            home = h["home_team"] == team
+            pf += int(h["home_score" if home else "away_score"])
+            pa += int(h["away_score" if home else "home_score"])
+            n += 1
+    return n, (pf / n if n else None), (pa / n if n else None)
+
+
+def flag_rows(rows, sched):
+    """Check the two research rules for every game in this check (picks never change).
+
+    Rule 2 (bad defenses): BetMGM total ≤ 45 and both teams allowing ≥ 26 a game → UNDER.
+    Rule 3 (low-scoring team): a team scoring < 14 a game that isn't an underdog of
+    more than 8 (nflverse reference spread) → OVER. Averages are unrounded, current
+    season, regular season, before kickoff. "4plus" = every team the rule leans on
+    has at least 4 prior games."""
+    out = []
+    for r in rows:
+        g = match(sched, r)
+        if not g:
             continue
-        kick = datetime.fromisoformat(f"{g['gameday']}T{g['gametime']}").replace(tzinfo=EASTERN)
-        out.setdefault(frozenset((g["away_team"], g["home_team"])), []).append((kick, g["stadium_id"]))
+        stats = {t: pregame(sched, g, t) for t in (r["home"], r["away"])}
+        (hn, hpf, hpa), (an, apf, apa) = stats[r["home"]], stats[r["away"]]
+        r2 = (float(r["total"]) <= 45 and hn >= 1 and an >= 1 and hpa >= 26 and apa >= 26)
+        spread = g["spread_line"]
+        r3_teams = []
+        if spread != "":
+            for t in (r["home"], r["away"]):
+                n, pf, _ = stats[t]
+                team_spread = -float(spread) if t == r["home"] else float(spread)
+                if n >= 1 and pf < 14 and team_spread <= 8:
+                    r3_teams.append(t)
+        fmt = lambda x: "" if x is None else f"{x:.4f}"
+        out.append({
+            "seen_at_utc": r["seen_at_utc"], "event_id": r["event_id"], "kickoff_utc": r["kickoff_utc"],
+            "away": r["away"], "home": r["home"], "total": r["total"],
+            "over_price": r["over_price"], "under_price": r["under_price"], "ref_spread_line": spread,
+            "home_prior_games": hn, "home_pf": fmt(hpf), "home_pa": fmt(hpa),
+            "away_prior_games": an, "away_pf": fmt(apf), "away_pa": fmt(apa),
+            "r2_bad_def_under": int(r2), "r2_4plus": int(r2 and hn >= 4 and an >= 4),
+            "r3_low_scoring_over": int(bool(r3_teams)), "r3_teams": "+".join(r3_teams),
+            "r3_4plus": int(any(stats[t][0] >= 4 for t in r3_teams)),
+        })
     return out
 
 
-def wind_rows(rows, now):
+def stadiums(sched):
+    """Each game's stadium: {(team, team): [(kickoff, id)]}."""
+    out = {}
+    for g in sched:
+        out.setdefault(frozenset((g["away_team"], g["home_team"])), []).append((g["kick"], g["stadium_id"]))
+    return out
+
+
+def wind_rows(rows, now, sched):
     """Forecast wind at the kickoff hour for each open-air game in this check."""
-    sched = stadiums()
+    sched = stadiums(sched)
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     out = []
     for r in rows:
