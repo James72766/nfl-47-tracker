@@ -10,6 +10,10 @@ Every run, changed or not, is logged in data/robot-runs.csv so gaps show up.
 
 Phone alerts go to the ntfy app (topic in the NTFY_TOPIC secret): one when new
 openers appear, one when a line crosses 47 and flips the bet.
+
+For open-air games it also saves the wind forecast for the kickoff hour
+(Open-Meteo, free) to data/wind-forecasts.csv, so the 10–15 mph wind idea can
+later be tested on what the forecast said when you'd bet, not kickoff wind.
 """
 import csv
 import json
@@ -27,6 +31,25 @@ RUNS = os.path.join(HERE, "data", "robot-runs.csv")
 LINE_COLS = ["seen_at_utc", "event_id", "kickoff_utc", "away", "home",
              "total", "over_price", "under_price", "book_updated_utc"]
 RUN_COLS = ["run_at_utc", "games_with_lines", "rows_added", "credits_left"]
+WIND = os.path.join(HERE, "data", "wind-forecasts.csv")
+WIND_COLS = ["seen_at_utc", "event_id", "kickoff_utc", "away", "home", "stadium_id",
+             "forecast_hour_utc", "wind_mph", "gust_mph", "temp_f"]
+GAMES_CSV = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
+# Open-air stadiums (nflverse ids) and where they are. Domes and retractable
+# roofs are skipped. Overseas grounds are open-air even where nflverse says dome.
+OPEN_AIR = {
+    "BAL00": (39.278, -76.623), "BOS00": (42.091, -71.264), "BUF00": (42.774, -78.787),
+    "CAR00": (35.226, -80.853), "CHI98": (41.862, -87.617), "CIN00": (39.096, -84.516),
+    "CLE00": (41.506, -81.700), "DEN00": (39.744, -105.020), "GNB00": (44.501, -88.062),
+    "JAX00": (30.324, -81.637), "KAN00": (39.049, -94.484), "MIA00": (25.958, -80.239),
+    "NAS00": (36.167, -86.771), "NYC01": (40.814, -74.075), "PHI00": (39.901, -75.168),
+    "PIT00": (40.447, -80.016), "SEA00": (47.595, -122.332), "SFO01": (37.403, -121.970),
+    "TAM00": (27.976, -82.503), "WAS00": (38.908, -76.865), "LON00": (51.556, -0.280),
+    "LON02": (51.604, -0.066), "GER00": (48.219, 11.625), "MUN01": (48.219, 11.625),
+    "PAR00": (48.925, 2.360), "MEL00": (-37.820, 144.983), "MEX00": (19.303, -99.151),
+    "MAD01": (40.453, -3.688), "SAO00": (-23.545, -46.474), "RIO00": (-22.912, -43.230),
+}
+EASTERN = ZoneInfo("America/New_York")
 THRESHOLD = 47
 VEGAS = ZoneInfo("America/Los_Angeles")
 
@@ -139,6 +162,58 @@ def main():
           f"{credits_left} credits left")
     for title, message in alerts_for(last, moved):
         send(title, message)
+    try:  # weather is extra; a failure here must never cost the odds snapshot
+        wind = wind_rows(rows, now)
+        if wind:
+            append_rows(WIND, WIND_COLS, wind)
+        print(f"wind forecasts saved for {len(wind)} open-air games")
+    except Exception as e:
+        print(f"wind forecasts not saved: {e}")
+
+
+def stadiums():
+    """Each upcoming game's stadium from the nflverse schedule: {(team, team): [(kickoff, id)]}."""
+    with urllib.request.urlopen(GAMES_CSV, timeout=60) as resp:
+        text = resp.read().decode()
+    out = {}
+    for g in csv.DictReader(text.splitlines()):
+        if not g["gameday"] or not g["gametime"]:
+            continue
+        kick = datetime.fromisoformat(f"{g['gameday']}T{g['gametime']}").replace(tzinfo=EASTERN)
+        out.setdefault(frozenset((g["away_team"], g["home_team"])), []).append((kick, g["stadium_id"]))
+    return out
+
+
+def wind_rows(rows, now):
+    """Forecast wind at the kickoff hour for each open-air game in this check."""
+    sched = stadiums()
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    out = []
+    for r in rows:
+        kick = datetime.fromisoformat(r["kickoff_utc"].replace("Z", "+00:00"))
+        if (kick - now).days > 15:  # past the forecast range
+            continue
+        match = [sid for k, sid in sched.get(frozenset((r["away"], r["home"])), [])
+                 if abs((k - kick).total_seconds()) < 36 * 3600]
+        if not match or match[0] not in OPEN_AIR:
+            continue
+        lat, lon = OPEN_AIR[match[0]]
+        hour = datetime.fromtimestamp(round(kick.timestamp() / 3600) * 3600, timezone.utc)
+        day = hour.strftime("%Y-%m-%d")
+        url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
+               "&hourly=wind_speed_10m,wind_gusts_10m,temperature_2m&wind_speed_unit=mph"
+               f"&temperature_unit=fahrenheit&timezone=UTC&start_date={day}&end_date={day}")
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            h = json.load(resp)["hourly"]
+        key = hour.strftime("%Y-%m-%dT%H:00")
+        if key not in h["time"]:
+            continue
+        i = h["time"].index(key)
+        out.append({"seen_at_utc": stamp, "event_id": r["event_id"], "kickoff_utc": r["kickoff_utc"],
+                    "away": r["away"], "home": r["home"], "stadium_id": match[0],
+                    "forecast_hour_utc": key, "wind_mph": round(h["wind_speed_10m"][i]),
+                    "gust_mph": round(h["wind_gusts_10m"][i]), "temp_f": round(h["temperature_2m"][i])})
+    return out
 
 
 def same_line(prev, row):
