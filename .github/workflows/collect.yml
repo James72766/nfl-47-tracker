@@ -1,13 +1,15 @@
 # Takes a BetMGM snapshot on a schedule. Times are UTC.
 # Free plan = 500 calls a month; this schedule uses about 420.
+# Runs sit at 10 past the hour: GitHub often starts them 30-50 minutes late,
+# and a 7:10am Vegas run still lands before the 8am morning checkpoint.
 name: BetMGM snapshot
 
 on:
   schedule:
-    - cron: "50 */2 * * *"        # every 2 hours (14:50 UTC = 7:50am Vegas until Nov 1)
-    - cron: "50 15 * * *"         # 7:50am Vegas after clocks change on Nov 1
-    - cron: "50 23 * * 0"         # Sunday night, when openers come out
-    - cron: "50 1,3,5 * * 1"
+    - cron: "10 */2 * * *"        # every 2 hours (14:10 UTC = 7:10am Vegas until Nov 1)
+    - cron: "10 15 * * *"         # 7:10am Vegas after clocks change on Nov 1
+    - cron: "10 23 * * 0"         # Sunday night, when openers come out
+    - cron: "10 1,3,5 * * 1"
   workflow_dispatch:
 
 permissions:
