@@ -1,0 +1,28 @@
+# Safety net for the relay: if no robot run is waiting or running, start one.
+# Uses GitHub's own schedule, which can be late or skip; it only matters if the
+# relay ever breaks, and a healthy relay makes this do nothing.
+name: Relay check
+
+on:
+  schedule:
+    - cron: "40 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restart the relay if it has stopped
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh run list -R "${{ github.repository }}" --workflow collect.yml --limit 20 \
+                --json status --jq '[.[] | select(.status != "completed")] | length')
+          echo "Robot runs waiting or running: $n"
+          if [ "$n" = "0" ]; then
+            gh workflow run collect.yml -R "${{ github.repository }}" -f wait=wait-0
+            echo "Relay restarted"
+          fi

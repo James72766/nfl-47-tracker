@@ -1,24 +1,33 @@
-# Takes a BetMGM snapshot on a schedule. Times are UTC.
-# Free plan = 500 calls a month; this schedule uses about 420.
-# Runs sit at 10 past the hour: GitHub often starts them 30-50 minutes late,
-# and a 7:10am Vegas run still lands before the 8am morning checkpoint.
+# Takes a BetMGM snapshot, then books the next one (the relay).
+# GitHub's own schedule skipped and delayed runs, so each run starts the next
+# run itself behind a free GitHub wait timer (environments wait-0 ... wait-120).
+# relay.py picks the timer so runs land just after each check time:
+# every 2 hours at :10 UTC, 15:10 UTC, and extra Sunday-night checks.
+# About 420 Odds API calls a month (free plan: 500).
 name: BetMGM snapshot
 
 on:
-  schedule:
-    - cron: "10 */2 * * *"        # every 2 hours (14:10 UTC = 7:10am Vegas until Nov 1)
-    - cron: "10 15 * * *"         # 7:10am Vegas after clocks change on Nov 1
-    - cron: "10 23 * * 0"         # Sunday night, when openers come out
-    - cron: "10 1,3,5 * * 1"
   workflow_dispatch:
+    inputs:
+      wait:
+        description: "Wait timer before this run (wait-0 ... wait-120)"
+        default: "wait-0"
 
 permissions:
   contents: write
+  actions: write
 
 concurrency: snapshot
 
 jobs:
+  wait:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.wait || 'wait-0' }}
+    steps:
+      - run: echo "Waited (${{ inputs.wait }})"
+
   snapshot:
+    needs: wait
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,3 +43,18 @@ jobs:
           git commit -m "BetMGM snapshot" || exit 0
           git pull --rebase
           git push
+
+  next:
+    # Book the next run even if this snapshot failed, but not if this run was cancelled.
+    needs: snapshot
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Book the next run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          wait=$(python3 relay.py)
+          echo "Next run: $wait"
+          gh workflow run collect.yml -R "${{ github.repository }}" -f wait="$wait"
